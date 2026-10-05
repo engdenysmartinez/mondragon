@@ -70,23 +70,25 @@ O projeto e a chave **publishable** fornecidos já estão configurados em `publi
 
 O banco gera a numeração sequencial, registra o responsável e a hora da leitura no servidor e preserva essas informações durante a edição. Apenas o proprietário edita seus rascunhos. Usuários autorizados podem consultar os romaneios da equipe. Após confirmar, o documento fica imutável pelas APIs de usuário. Os destinatários são congelados na confirmação.
 
-## E-mail automático
+## E-mail automático pelo Gmail
 
-A função `supabase/functions/send-manifest/index.ts` envia o conteúdo completo do romaneio via Resend. Ela verifica o JWT, a autorização do usuário, a propriedade e a confirmação do documento. Não aceita destinatários nem conteúdo arbitrário do navegador.
+A função send-manifest usa Gmail SMTP com TLS obrigatório em smtp.gmail.com:465 (o Supabase bloqueia as portas 25 e 587). A autenticação do usuário, a autorização por RLS, a propriedade e a confirmação do romaneio continuam obrigatórias. O conteúdo e os destinatários vêm do banco.
 
-1. Configure um remetente/domínio verificado no Resend.
-2. No Supabase, configure os segredos `RESEND_API_KEY`, `MAIL_FROM` (ex.: `Mondragon <almoxarifado@seu-dominio.com>`) e `APP_ORIGIN` (origem exata do frontend; para teste, `http://localhost:4173`). `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` são variáveis do ambiente de funções Supabase.
-3. Publique a função pelo painel ou pela CLI:
+Nos segredos das Edge Functions do Supabase, cadastre:
 
-```text
-supabase functions deploy send-manifest --project-ref skawydzwuroolpybrngl --no-verify-jwt
-```
+- GMAIL_USER: endereço Gmail completo da conta remetente.
+- GMAIL_APP_PASSWORD: senha de aplicativo dessa conta, criada pelo titular com verificação em duas etapas. Insira diretamente no painel; não armazene no repositório nem no frontend.
+- APP_ORIGIN: origem do frontend (no teste local, http://localhost:4173).
 
-O handler faz sua própria validação do JWT com `/auth/v1/user`. A opção acima desativa apenas a verificação prévia do gateway, não a autenticação implementada na função.
+RESEND_API_KEY e MAIL_FROM não são utilizados nesta versão. O nome do remetente é Mondragon; o endereço sempre é o próprio GMAIL_USER autenticado.
 
-Ao confirmar, o frontend chama a função automaticamente. Se houver falha de rede ou configuração, o romaneio permanece confirmado e o botão **Enviar e-mail** permite nova tentativa. `sent` significa aceito pelo provedor, não comprovação de entrega na caixa de entrada. Há chave de idempotência no Resend; sua janela de deduplicação é limitada pelo provedor. Não há worker de repetição automática: se o navegador fechar entre confirmar e enviar, reabra o romaneio e tente o envio. Antes de uso em produção, implemente uma fila/worker durável e monitore a entrega.
+Publique supabase/functions/send-manifest/index.ts pelo painel. A dependência Nodemailer está fixada na versão 10.0.14. Preserve a configuração de autenticação existente da função.
 
-Documentação de referência: [Supabase Auth](https://supabase.com/docs/guides/auth/passwords), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security), [envio de e-mail](https://supabase.com/docs/guides/functions/examples/send-emails) e [Resend](https://resend.com/docs/api-reference/emails/send-email).
+No sistema, entre como administrador e abra Configurações → Testar conexão com Gmail. Essa ação verifica conexão TLS e autenticação, sem enviar mensagem. Depois, abra um romaneio confirmado e clique em Enviar e-mail. Confira a mensagem em Enviados no Gmail e na caixa do destinatário. Aceitação SMTP não comprova entrega final.
+
+O SMTP não oferece a chave de idempotência do Resend. Um Message-ID estável facilita rastreio, mas não garante deduplicação. Se o envio tiver resposta incerta, destinatários parcialmente recusados ou falha ao salvar o status, confira Enviados antes de tentar novamente. Envios simultâneos por várias abas não estão protegidos por trava distribuída. Não há fila de retentativas em segundo plano.
+
+Referências: [Google: senhas de aplicativo](https://support.google.com/mail/answer/185833), [Supabase: limites de rede](https://supabase.com/docs/guides/functions/limits).
 
 ## Verificação e limites
 
@@ -98,7 +100,7 @@ Os testes cobrem leitura simples/estruturada, valores inválidos, remanejamento 
 
 A leitura real com `$` foi validada no navegador, inclusive após salvar e reabrir a peça e no romaneio confirmado. Os oito testes locais passaram, incluindo CSV, decimais e pedido incompleto. `test/qr-database.sql` passou no Supabase, verificando persistência de pedido/item/prefixo, edição decimal, remanejamento e confirmação; o teste reverte seus registros.
 
-Em 05/10/2026, após autenticação nos painéis, os arquivos foram publicados em https://github.com/engdenysmartinez/mondragon. As três tabelas, suas políticas RLS e as quatro funções SQL foram instaladas e verificadas no Supabase. A Edge Function `send-manifest` também foi publicada. Os destinatários de teste foram cadastrados conforme solicitado. A conta administradora foi criada pelo usuário e vinculada a `app_members`. O teste transacional `test/database-smoke.sql` passou no banco real: criação, registro, remanejamento, confirmação e bloqueio de edição após fechamento. Os registros desse teste foram revertidos; a sequência pode ter reservado um número. Os quatro testes locais também passaram. O envio real ainda exige os segredos do Resend. O login com senha e a entrega de e-mail ainda precisam ser verificados pelo usuário. A opção de verificação JWT legada deve ser revisada na ativação da função conforme a seção de e-mail, com autorização do administrador.
+Em 05/10/2026, após autenticação nos painéis, os arquivos foram publicados em https://github.com/engdenysmartinez/mondragon. As três tabelas, suas políticas RLS e as quatro funções SQL foram instaladas e verificadas no Supabase. A Edge Function `send-manifest` também foi publicada. Os destinatários de teste foram cadastrados conforme solicitado. A conta administradora foi criada pelo usuário e vinculada a `app_members`. O teste transacional `test/database-smoke.sql` passou no banco real: criação, registro, remanejamento, confirmação e bloqueio de edição após fechamento. Os registros desse teste foram revertidos; a sequência pode ter reservado um número. Os quatro testes locais também passaram. O envio real pelo Gmail exige GMAIL_USER e GMAIL_APP_PASSWORD. O login com senha e a entrega de e-mail ainda precisam ser verificados pelo usuário. A opção de verificação JWT legada deve ser revisada na ativação da função conforme a seção de e-mail, com autorização do administrador.
 
 Este é um MVP para validação do fluxo: não faz baixa de estoque, integração ERP, assinatura eletrônica certificada, controle de concorrência entre múltiplas abas do mesmo usuário ou trilha completa de versões de edição. Os dados do modo real dependem da instalação do esquema acima.
 

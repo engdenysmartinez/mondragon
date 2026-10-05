@@ -14,7 +14,7 @@ Abra http://localhost:4173 e clique em **Abrir demonstração**. O servidor aten
 
 1. Inicie uma separação. O primeiro número da demonstração é **000147**.
 2. Informe projeto e estação, ou preencha-os após a primeira leitura.
-3. Digite/bipe **BMA0006765** e pressione Enter.
+3. Bipe **180$BMA0013539$25024$31133$1,00$21117$1** e pressione Enter. O sistema preenche os dados da etiqueta.
 4. Confira código, projeto, estação, quantidade e caixa; confirme a peça.
 5. Crie caixas e use o lápis de cada item para editar ou remanejar.
 6. Revise e confirme o romaneio. Caixas vazias impedem a confirmação.
@@ -24,7 +24,25 @@ No modo de demonstração, Gabriela é uma identidade fictícia, os dados ficam 
 
 ## QR code e leitores
 
-O exemplo real fornecido, `BMA0006765`, é apenas o identificador. Projeto, estação e quantidade não podem ser deduzidos desse texto; no protótipo são preenchidos pelo usuário. Para consulta automática por BMA, é necessário fornecer e importar um cadastro de peças; essa importação não está implementada.
+O formato real da etiqueta é composto por sete campos separados por `$`:
+
+```text
+180$BMA0013539$25024$31133$1,00$21117$1
+```
+
+| Campo | Exemplo | Tratamento |
+| --- | --- | --- |
+| Prefixo do QR | 180 | Preservado como metadado; significado ainda não informado |
+| Código do item | BMA0013539 | Código BMA |
+| Projeto | 25024 | Preenchimento automático |
+| Estação | 31133 | Preenchimento automático |
+| Quantidade | 1,00 | Decimal com vírgula ou ponto, até duas casas |
+| Pedido de compras | 21117 | Preservado como identificador textual |
+| Item do pedido | 1 | Preservado como identificador textual |
+
+Os dados são editáveis antes de confirmar a peça. Pedido e item aparecem na lista, no romaneio, no CSV e no modelo de e-mail. O prefixo é preservado na edição e exportado no CSV. Quantidades devem ser maiores que zero e no máximo 999999. Zeros iniciais dos identificadores são preservados. Leituras incompletas são recusadas.
+
+Códigos simples como `BMA0006765` continuam aceitos, com preenchimento manual dos demais campos. Registros antigos sem pedido continuam compatíveis. Se um dos campos de pedido for preenchido, o outro também é obrigatório.
 
 Também são aceitos QR codes com JSON:
 
@@ -45,7 +63,7 @@ Leitores USB/Bluetooth devem operar como teclado, preferencialmente com sufixo E
 O projeto e a chave **publishable** fornecidos já estão configurados em `public/api.js`. Essa chave é pública por definição; autorização depende de Auth, RLS e funções do banco. Nunca coloque service_role ou a chave Resend no frontend.
 
 1. Acesse o projeto `skawydzwuroolpybrngl` no painel Supabase.
-2. No projeto informado, `supabase/schema.sql` já foi aplicado em 05/10/2026. Não execute novamente nele. Para um projeto novo, execute **uma vez**, revisando conflitos antes de aplicar em um banco existente.
+2. No projeto informado, `supabase/schema.sql` e a atualização `supabase/migrations/20261005_qr_purchase_order.sql` já foram aplicados em 05/10/2026. Não recrie as tabelas. Para um projeto novo, execute o esquema atual **uma vez**, revisando conflitos antes de aplicar em um banco existente.
 3. Em Authentication > Users, crie os usuários de teste com e-mail e senha.
 4. Autorize cada usuário na tabela `app_members`, usando o UUID real de Authentication, o nome completo e o papel `operator` ou `admin`. Há um exemplo SQL comentado no fim do arquivo.
 5. Entre com um administrador e cadastre os três destinatários em Configurações.
@@ -77,6 +95,8 @@ node --test --test-isolation=none
 ```
 
 Os testes cobrem leitura simples/estruturada, valores inválidos, remanejamento e validações de confirmação. O fluxo de demonstração foi exercitado no navegador com duas caixas e seis unidades, incluindo bloqueio de caixa vazia.
+
+A leitura real com `$` foi validada no navegador, inclusive após salvar e reabrir a peça e no romaneio confirmado. Os oito testes locais passaram, incluindo CSV, decimais e pedido incompleto. `test/qr-database.sql` passou no Supabase, verificando persistência de pedido/item/prefixo, edição decimal, remanejamento e confirmação; o teste reverte seus registros.
 
 Em 05/10/2026, após autenticação nos painéis, os arquivos foram publicados em https://github.com/engdenysmartinez/mondragon. As três tabelas, suas políticas RLS e as quatro funções SQL foram instaladas e verificadas no Supabase. A Edge Function `send-manifest` também foi publicada. Os destinatários de teste foram cadastrados conforme solicitado. A conta administradora foi criada pelo usuário e vinculada a `app_members`. O teste transacional `test/database-smoke.sql` passou no banco real: criação, registro, remanejamento, confirmação e bloqueio de edição após fechamento. Os registros desse teste foram revertidos; a sequência pode ter reservado um número. Os quatro testes locais também passaram. O envio real ainda exige os segredos do Resend. O login com senha e a entrega de e-mail ainda precisam ser verificados pelo usuário. A opção de verificação JWT legada deve ser revisada na ativação da função conforme a seção de e-mail, com autorização do administrador.
 

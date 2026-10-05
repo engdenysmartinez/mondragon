@@ -70,13 +70,19 @@ begin
   if coalesce(item->>'id','') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' or coalesce(item->>'code','') !~ '^BMA[0-9]{7}$'
    or coalesce(trim(item->>'project'),'')='' or length(item->>'project')>120
    or coalesce(trim(item->>'station'),'')='' or length(item->>'station')>120
-   or coalesce(item->>'qty','') !~ '^[0-9]{1,6}$' then raise exception 'Dados da peça inválidos.'; end if;
-  if (item->>'qty')::int<1 then raise exception 'Quantidade inválida.'; end if;
+   or coalesce(item->>'qty','') !~ '^[0-9]{1,6}(\.[0-9]{1,2})?$' then raise exception 'Dados da peça inválidos.'; end if;
+  if (item->>'qty')::numeric<=0 or (item->>'qty')::numeric>999999 then raise exception 'Quantidade inválida.'; end if;
+  if coalesce(item->>'purchase_order','')<>'' or coalesce(item->>'purchase_order_item','')<>'' then
+   if coalesce(item->>'purchase_order','') !~ '^[0-9]{1,40}$' or coalesce(item->>'purchase_order_item','') !~ '^[0-9]{1,20}$' then raise exception 'Pedido de compras ou item inválido.'; end if;
+  end if;
+  if length(coalesce(item->>'qr_prefix',''))>80 then raise exception 'Prefixo QR inválido.'; end if;
   if not exists(select 1 from jsonb_array_elements(p_boxes) b where b->>'id'=item->>'box') then raise exception 'Caixa não encontrada.'; end if;
   select value into previous_item from jsonb_array_elements(doc.items) where value->>'id'=item->>'id';
   normalized := normalized || jsonb_build_array(jsonb_build_object(
    'id',item->>'id','code',item->>'code','project',trim(item->>'project'),'station',trim(item->>'station'),
-   'qty',(item->>'qty')::int,'box',item->>'box',
+   'qty',(item->>'qty')::numeric,'box',item->>'box',
+   'purchase_order',coalesce(item->>'purchase_order',''),'purchase_order_item',coalesce(item->>'purchase_order_item',''),
+   'qr_prefix',coalesce(item->>'qr_prefix',''),
    'scanned_at',coalesce(previous_item->>'scanned_at',now()::text),
    'operator',coalesce(previous_item->>'operator',operator_name)
   ));

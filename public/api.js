@@ -20,5 +20,6 @@ export const createDocument = (project,station) => request('/rest/v1/rpc/create_
 export const saveDocument = doc => request('/rest/v1/rpc/save_picking','POST',{p_id:doc.id,p_project:doc.project,p_station:doc.station,p_boxes:doc.boxes,p_items:doc.items});
 export const finalizeDocument = id => request('/rest/v1/rpc/finalize_picking','POST',{p_id:id});
 export const sendManifest = id => request('/functions/v1/send-manifest','POST',{id});
+export const verifyGmail = () => request('/functions/v1/send-manifest','POST',{action:'verify'});
 export const getRecipients = () => request('/rest/v1/notification_recipients?select=role,email&order=role');
 export const saveRecipients = recipients => request('/rest/v1/rpc/set_recipients','POST',{p_recipients:recipients});
